@@ -1,0 +1,132 @@
+buildscript {
+    ext {
+        springBootPluginVersion = "2.1.9.RELEASE"
+        feignHystrixStarterVersion = '2.1.4.RELEASE'
+        openfeignVersion = '10.3.0'
+        lombokVersion = '1.18.2'
+        junitVersion = "4.12"
+        slf4jVersion= "1.7.26"
+        jjwtVersion = "0.11.0"
+        jacksonVersion = "2.8.10"
+    }
+
+    repositories {
+        maven {
+            url 'http://maven.aliyun.com/nexus/content/groups/public/'
+        }
+        jcenter()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("org.springframework.boot:spring-boot-gradle-plugin:$springBootPluginVersion")
+    }
+}
+
+group = 'com.qimok'
+version '0.0.1-SNAPSHOT'
+
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'io.spring.dependency-management'
+apply plugin: 'maven-publish'
+
+compileJava.options.encoding = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'
+
+javadoc {
+    options.encoding = 'UTF-8'
+}
+
+
+allprojects {
+    repositories {
+         maven {
+             name "aliyunmaven"
+             url "http://maven.aliyun.com/nexus/content/groups/public/"
+         }
+    }
+}
+
+dependencies {
+    compile("org.springframework.boot:spring-boot-configuration-processor:$springBootPluginVersion")
+    compile("org.springframework.boot:spring-boot-starter-logging:$springBootPluginVersion")
+    // feign
+    compile("org.springframework.cloud:spring-cloud-starter-openfeign:$feignHystrixStarterVersion")
+    compile("io.github.openfeign:feign-core:$openfeignVersion")
+    compile("io.github.openfeign:feign-httpclient:$openfeignVersion")
+    compile("io.github.openfeign:feign-okhttp:$openfeignVersion")
+    compile("org.projectlombok:lombok:$lombokVersion")
+    compileOnly("org.json:json:20190722")
+    compile("joda-time:joda-time:2.9.9")
+    compile("io.jsonwebtoken:jjwt-api:$jjwtVersion")
+    runtime("io.jsonwebtoken:jjwt-impl:$jjwtVersion")
+    runtime("io.jsonwebtoken:jjwt-jackson:$jjwtVersion")
+    compile("com.fasterxml.jackson.datatype:jackson-datatype-jdk8:$jacksonVersion")
+    compile("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion")
+    testCompile("junit:junit:$junitVersion")
+}
+
+idea {
+    module {
+        downloadSources = true
+        inheritOutputDirs = false
+        outputDir = file("$buildDir/classes/main/")
+        testOutputDir = file("$buildDir/classes/test/")
+    }
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.10'
+}
+
+publishing {
+    publications {
+        client(MavenPublication) {
+            groupId 'com.qimok'
+            artifactId 'api-client-assembler'
+            version "$project.version"
+
+            from components.java
+
+            artifact sourcesJar
+            artifact javadocJar
+
+            // have to manually change the scope of maven dependencies in the generated pom from runtime to compile
+            // see https://discuss.gradle.org/t/maven-publish-plugin-generated-pom-making-dependency-scope-runtime/7494
+            pom.withXml {
+                asNode().dependencies.'*'.findAll() {
+                    it.scope.text() == 'runtime' && project.configurations.compile.allDependencies.find { dep ->
+                        dep.name == it.artifactId.text()
+                    }
+                }.each() {
+                    it.scope*.value = 'compile'
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name 'snapshots'
+            url 'http://nexus.xxx.com/repository/snapshots/'
+            credentials {
+                username "$mavenUser"
+                password "$mavenPassword"
+            }
+        }
+    }
+}
+
+task sourcesJar(type: Jar) {
+    classifier 'sources'
+    from sourceSets.main.allJava
+}
+
+task javadocJar(type: Jar, dependsOn: 'javadoc') {
+    classifier 'javadoc'
+    from javadoc
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = "UTF-8"
+}
